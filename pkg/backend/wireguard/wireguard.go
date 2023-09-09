@@ -17,6 +17,8 @@
 package wireguard
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -130,23 +132,24 @@ func (be *WireguardBackend) RegisterNetwork(ctx context.Context, wg *sync.WaitGr
 	var err error
 	var dev, v6Dev *wgDevice
 	var publicKey string
+	pskHash := md5.Sum([]byte(cfg.PSK))
 	if cfg.Mode == Separate {
 		if config.EnableIPv4 {
-			dev, err = createWGDev(ctx, wg, "flannel-wg", cfg.PSK, &keepalive, cfg.ListenPort, cfg.MTU)
+			dev, err = createWGDev(ctx, wg, fmt.Sprintf("flannel-wg%s", hex.EncodeToString(pskHash[:])[:4]), cfg.PSK, &keepalive, cfg.ListenPort, cfg.MTU)
 			if err != nil {
 				return nil, err
 			}
 			publicKey = dev.attrs.publicKey.String()
 		}
 		if config.EnableIPv6 {
-			v6Dev, err = createWGDev(ctx, wg, "flannel-wg-v6", cfg.PSK, &keepalive, cfg.ListenPortV6, cfg.MTU)
+			v6Dev, err = createWGDev(ctx, wg, fmt.Sprintf("flannel-wg%s-v6", hex.EncodeToString(pskHash[:])[:4]), cfg.PSK, &keepalive, cfg.ListenPortV6, cfg.MTU)
 			if err != nil {
 				return nil, err
 			}
 			publicKey = v6Dev.attrs.publicKey.String()
 		}
 	} else if cfg.Mode == Auto || cfg.Mode == Ipv4 || cfg.Mode == Ipv6 {
-		dev, err = createWGDev(ctx, wg, "flannel-wg", cfg.PSK, &keepalive, cfg.ListenPort, cfg.MTU)
+		dev, err = createWGDev(ctx, wg, fmt.Sprintf("flannel-wg%s", hex.EncodeToString(pskHash[:])[:4]), cfg.PSK, &keepalive, cfg.ListenPort, cfg.MTU)
 		if err != nil {
 			return nil, err
 		}
