@@ -1,41 +1,38 @@
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: kube-flannel-cfg
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     tier: node
     app: flannel
+    release: {{ .Release.Name }}
 data:
   cni-conf.json: |
-    {
-      "name": "cbr0",
-      "cniVersion": "0.3.1",
-      "plugins": [
-        {
-          "type": "flannel",
-          "delegate": {
-            "hairpinMode": true,
-            "isDefaultGateway": true
-          }
-        },
-        {
-          "type": "portmap",
-          "capabilities": {
-            "portMappings": true
-          }
-        }
-      ]
-    }
+    {{ toJson .Values.cniConf }}
   net-conf.json: |
     {
 {{- if .Values.podCidr }}
       "Network": {{ .Values.podCidr | quote }},
+      "SubnetLen": {{ default 24 .Values.subnet.ip4.length }},
+{{- if .Values.subnet.ip4.min }}
+      "SubnetMin": {{ .Values.subnet.ip4.min | quote }},
+{{- end }}
+{{- if .Values.subnet.ip4.max }}
+      "SubnetMax": {{ .Values.subnet.ip4.max | quote }},
+{{- end }}
 {{- else }}
       "EnableIPv4": false,
 {{- end }}
 {{- if .Values.podCidrv6 }}
       "IPv6Network": {{ .Values.podCidrv6 | quote }},
+      "IPv6SubnetLen": {{ default 64 .Values.subnet.ip6.length }},
+{{- if .Values.subnet.ip6.min }}
+      "IPv6SubnetMin": {{ .Values.subnet.ip6.min | quote }},
+{{- end }}
+{{- if .Values.subnet.ip6.max }}
+      "IPv6SubnetMax": {{ .Values.subnet.ip6.max | quote }},
+{{- end }}
       "EnableIPv6": true,
 {{- end }}
       "Backend": {

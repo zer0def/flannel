@@ -8,6 +8,29 @@ global:
 podCidr: "10.244.0.0/16"
 podCidrv6: ""
 
+subnet:  # host subnet configuration
+  ip4:
+    length: 24
+    min: ""  # 10.133.37.42
+    max: ""  # 10.133.37.69
+  ip6:
+    length: 64
+    min: ""  # 10.133.37.42
+    max: ""  # 10.133.37.69
+
+etcd:
+  image:
+    repository: quay.io/coreos/etcd
+    tag: v3.5.6
+  endpoints:
+  - http://127.0.0.1:2379
+  prefix: /coreos.com/network
+  auth: ""
+  tls:
+    keyfile: ""
+    certfile: ""
+    cafile: ""
+
 flannel:
   # kube-flannel image
   image:
@@ -16,10 +39,10 @@ flannel:
   image_cni:
     repository: docker.io/flannel/flannel-cni-plugin
     tag: v1.4.0-flannel1
+  kubeSubnetMgr: true
   # flannel command arguments
   args:
   - "--ip-masq"
-  - "--kube-subnet-mgr"
   # Backend for kube-flannel. Backend should not be changed
   # at runtime. (vxlan, host-gw, wireguard, udp)
   # Documentation at https://github.com/flannel-io/flannel/blob/master/Documentation/backends.md
@@ -58,3 +81,39 @@ flannel:
     operator: Exists
   - effect: NoSchedule
     operator: Exists
+
+cniConf:
+  name: cbr0
+  cniVersion: 0.3.1
+  plugins:
+  - type: flannel
+    subnetFile: /run/flannel/subnet.env
+    delegate:
+      type: bridge
+      bridge: cni0
+      hairpinMode: true
+      isDefaultGateway: true
+  - type: portmap
+    capabilities:
+      portMappings: true
+
+host:
+  cniConfDir: /etc/cni/net.d
+  cniBinDir: /opt/cni/bin
+
+volumes: []
+volumeMounts: []
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+nodeSelector: {}
+topologySpreadConstraints: []
+tolerations:
+- operator: Exists
+  effect: NoSchedule
+confListFile: ""

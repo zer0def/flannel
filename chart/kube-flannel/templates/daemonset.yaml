@@ -1,37 +1,44 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: kube-flannel-ds
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     tier: node
     app: flannel
+    release: {{ .Release.Name }}
 spec:
   selector:
     matchLabels:
       app: flannel
+      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
         tier: node
         app: flannel
+        release: {{ .Release.Name }}
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/os
-                operator: In
-                values:
-                - linux
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       priorityClassName: system-node-critical
+      serviceAccountName: {{ .Release.Name }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+      {{ toYaml . | nindent 6 }}
+      {{- end }}
       {{- with .Values.flannel.tolerations }}
       tolerations:
-        {{- toYaml . | trim | nindent 8 }}
+      {{ toYaml . | nindent 6 }}
       {{- end }}
-      serviceAccountName: flannel
       initContainers:
       - name: install-cni-plugin
         image: {{ .Values.flannel.image_cni.repository }}:{{ .Values.flannel.image_cni.tag }}
@@ -51,19 +58,57 @@ spec:
         args:
         - -f
         - /etc/kube-flannel/cni-conf.json
-        - /etc/cni/net.d/10-flannel.conflist
+        - /etc/cni/net.d/{{ index .Values "confListFile" | default (printf "10-%s.conflist" .Release.Name) }}
         volumeMounts:
         - name: cni
           mountPath: /etc/cni/net.d
         - name: flannel-cfg
           mountPath: /etc/kube-flannel/
+        {{- if not .Values.flannel.kubeSubnetMgr }}
+      - name: populate-etcd
+        image: {{ .Values.etcd.image.repository }}:{{ .Values.etcd.image.tag }}
+        command:
+        - /bin/sh
+        - -xec
+        - |
+          etcdctl --endpoints={{ join "," .Values.etcd.endpoints }}{{ if or .Values.etcd.tls.keyfile .Values.etcd.tls.certfile }} --cert={{ .Values.etcd.tls.certfile | quote }} --key={{ .Values.etcd.tls.keyfile | quote }}{{ if .Values.etcd.tls.cafile }} --cacert={{ .Values.etcd.tls.cafile | quote }}{{ end }}{{ end }} txn <<EOF ||:
+          mod("{{ .Values.etcd.prefix }}/config") = "0"
+
+          put {{ .Values.etcd.prefix }}/config "$(sed ':a;N;$!ba;s/\n/\\n/g;s/"/\\"/g' /etc/kube-flannel/net-conf.json)"
+
+          get {{ .Values.etcd.prefix }}/config
+
+          EOF
+        volumeMounts:
+        - name: flannel-cfg
+          mountPath: /etc/kube-flannel/
+      {{- with .Values.volumeMounts }}
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+        {{- end }}
       containers:
       - name: kube-flannel
         image: {{ .Values.flannel.image.repository }}:{{ .Values.flannel.image.tag }}
         command:
-        - "/opt/bin/flanneld"
+        - /bin/sh
+        - -xec
+        - |
+          /opt/bin/flanneld \
         {{- range .Values.flannel.args }}
-        - {{ . | quote }}
+          {{ . | quote }} \
+        {{- end }}
+        {{- if .Values.flannel.kubeSubnetMgr }}
+          --kube-subnet-mgr
+        {{- else }}
+          {{- if or .Values.etcd.tls.keyfile .Values.etcd.tls.certfile }}
+          --etcd-keyfile={{ .Values.etcd.tls.keyfile | quote }} \
+          --etcd-certfile={{ .Values.etcd.tls.certfile | quote }} \
+            {{- if .Values.etcd.tls.cafile }}
+          --etcd-cafile={{ .Values.etcd.tls.cafile | quote }} \
+            {{- end }}
+          {{- end }}
+          --etcd-endpoints={{ join "," .Values.etcd.endpoints | quote }} \
+          --etcd-prefix={{ .Values.etcd.prefix | quote }}
         {{- end }}
         resources:
           requests:
@@ -91,23 +136,29 @@ spec:
           mountPath: /etc/kube-flannel/
         - name: xtables-lock
           mountPath: /run/xtables.lock
+      {{- with .Values.volumeMounts }}
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
       - name: run
         hostPath:
-          path: /run/flannel
+          path: /run/{{ .Release.Namespace }}--{{ .Release.Name }}
       - name: cni-plugin
         hostPath:
-          path: /opt/cni/bin
+          path: {{ default "/opt/cni/bin" .Values.host.cniBinDir }}
       - name: cni
         hostPath:
-          path: /etc/cni/net.d
+          path: {{ default "/etc/cni/net.d" .Values.host.cniConfDir }}
       - name: flannel-cfg
         configMap:
-          name: kube-flannel-cfg
+          name: {{ .Release.Name }}
       - name: xtables-lock
         hostPath:
           path: /run/xtables.lock
           type: FileOrCreate
+      {{- with .Values.volumes }}
+      {{ toYaml . | nindent 6 }}
+      {{- end }}
       {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.global.imagePullSecrets | nindent 6 }}
       {{- end }}
