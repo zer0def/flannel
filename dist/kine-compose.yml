@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+
+  pg:
+    image: postgres:16.1-alpine
+    environment:
+      POSTGRES_USER: kine
+      POSTGRES_PASSWORD: kine
+      POSTGRES_DB: kine
+    networks:
+    - kine-e2e
+    ports:
+    - "5432:5432"
+
+  kine:
+    image: rancher/kine:v0.11.0
+    entrypoint:
+    - /bin/sh
+    - -xc
+    - |
+      until nc -z pg 5432; do sleep 1; done
+      exec /bin/kine \
+      --endpoint=postgres://kine:kine@pg:5432/kine?sslmode=disable \
+      --debug
+      #--server-cert-file=/certs/server.pem \
+      #--server-key-file=/certs/server-key.pem \
+    networks:
+    - kine-e2e
+    ports:
+    - "2379:2379"
+    depends_on:
+    - pg
+
+networks:
+  kine-e2e:
+    driver: bridge
+    name: kine-e2e

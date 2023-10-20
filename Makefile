@@ -86,6 +86,10 @@ test: license-check gofmt deps verify-modules
 	# Run the functional tests
 	make e2e-test
 
+kine-e2e-test: bash_unit dist/flanneld-e2e-$(TAG)-$(ARCH).docker
+	$(MAKE) -C images/iperf3 ARCH=$(ARCH)
+	FLANNEL_DOCKER_IMAGE=$(REGISTRY):$(TAG)-$(ARCH) ./bash_unit dist/functional-test-kine.sh
+
 e2e-test: bash_unit dist/flanneld-e2e-$(TAG)-$(ARCH).docker
 	$(MAKE) -C images/iperf3 ARCH=$(ARCH)
 	FLANNEL_DOCKER_IMAGE=$(REGISTRY):$(TAG)-$(ARCH) ./bash_unit dist/functional-test.sh

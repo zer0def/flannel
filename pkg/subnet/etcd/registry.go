@@ -228,7 +228,7 @@ func (esr *etcdSubnetRegistry) createSubnet(ctx context.Context, sn ip.IP4Net, s
 
 	//Use a transaction to check if key was not already present in etcd
 	req := etcd.OpPut(key, string(value), etcd.WithLease(lresp.ID))
-	cond := etcd.Compare(etcd.Version(key), "=", 0)
+	cond := etcd.Compare(etcd.ModRevision(key), "=", 0)
 	tresp, err := esr.cli.Txn(ctx).If(cond).Then(req).Commit()
 	if err != nil {
 		_, rerr := esr.cli.Revoke(ctx, lresp.ID)
