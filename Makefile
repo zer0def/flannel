@@ -89,6 +89,10 @@ unit-test:
 		golang:$(GO_VERSION) \
 		/bin/bash -c 'cd /go/src/github.com/flannel-io/flannel && go test -v -cover -timeout 5m $(TEST_PACKAGES_EXPANDED)'
 
+kine-e2e-test: bash_unit dist/flanneld-e2e-$(TAG)-$(ARCH).docker
+	$(MAKE) -C images/iperf3 ARCH=$(ARCH)
+	FLANNEL_DOCKER_IMAGE=$(REGISTRY):$(TAG)-$(ARCH) ./bash_unit dist/functional-test-kine.sh
+
 e2e-test: bash_unit dist/flanneld-e2e-$(TAG)-$(ARCH).docker
 	$(MAKE) -C images/iperf3 ARCH=$(ARCH)
 	FLANNEL_DOCKER_IMAGE=$(REGISTRY):$(TAG)-$(ARCH) ./bash_unit dist/functional-test.sh
